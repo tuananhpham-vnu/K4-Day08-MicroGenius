@@ -275,7 +275,9 @@ def _make_local_chunk(content: str, source: str, filename: str, chunk_index: int
 
 
 def _tokenize(text: str) -> list[str]:
-    return re.findall(r"[\w]+", text.lower(), flags=re.UNICODE)
+    from .task5_semantic_search import _tokenize as shared_tokenize
+
+    return shared_tokenize(text)
 
 
 def _bm25_search(query: str, corpus: list[dict], top_k: int) -> list[dict]:
@@ -283,6 +285,8 @@ def _bm25_search(query: str, corpus: list[dict], top_k: int) -> list[dict]:
         return []
 
     query_tokens = _tokenize(query)
+    if not query_tokens:
+        return []
     tokenized_docs = [_tokenize(str(item.get("content", ""))) for item in corpus]
     doc_freq = Counter(token for tokens in tokenized_docs for token in set(tokens))
     avgdl = sum(len(tokens) for tokens in tokenized_docs) / max(len(tokenized_docs), 1)
@@ -302,6 +306,14 @@ def _bm25_search(query: str, corpus: list[dict], top_k: int) -> list[dict]:
             denom = tf + k1 * (1 - b + b * len(tokens) / max(avgdl, 1))
             score += idf * (tf * (k1 + 1)) / denom
 
+        from .task5_semantic_search import _keyword_overlap, _topic_boost
+
+        score += 2.5 * _keyword_overlap(query, str(corpus[idx].get("content", "")))
+        score += 5.0 * _topic_boost(
+            query,
+            corpus[idx].get("metadata", {}),
+            str(corpus[idx].get("content", "")),
+        )
         if score > 0:
             scored.append(
                 {

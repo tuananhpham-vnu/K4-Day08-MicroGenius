@@ -10,7 +10,13 @@ from __future__ import annotations
 import math
 from collections import Counter
 
-from .task5_semantic_search import _tokenize, load_or_build_chunks
+from .task5_semantic_search import (
+    _keyword_overlap,
+    _normalized_text,
+    _topic_boost,
+    _tokenize,
+    load_or_build_chunks,
+)
 
 
 CORPUS: list[dict] = []
@@ -109,18 +115,28 @@ def lexical_search(query: str, top_k: int = 10) -> list[dict]:
         return []
 
     scores = bm25.get_scores(query_tokens)
+    normalized_query = _normalized_text(query)
     ranked_indices = sorted(range(len(scores)), key=lambda idx: scores[idx], reverse=True)
 
     results: list[dict] = []
     for idx in ranked_indices:
-        score = float(scores[idx])
+        raw_score = float(scores[idx])
+        content = CORPUS[idx]["content"]
+        metadata = CORPUS[idx].get("metadata", {})
+        source_text = " ".join(
+            str(metadata.get(key, "")) for key in ("source", "filename", "title")
+        )
+        overlap = _keyword_overlap(query, f"{source_text}\n{content}")
+        score = raw_score + 2.5 * overlap + 5.0 * _topic_boost(query, metadata, content)
+        if normalized_query and normalized_query in _normalized_text(content):
+            score += 1.0
         if score <= 0:
             continue
         results.append(
             {
-                "content": CORPUS[idx]["content"],
+                "content": content,
                 "score": round(score, 4),
-                "metadata": dict(CORPUS[idx].get("metadata", {})),
+                "metadata": dict(metadata),
             }
         )
         if len(results) >= top_k:
