@@ -9,7 +9,10 @@ run without an external API key.
 
 from __future__ import annotations
 
+import html
+import re
 import sys
+import unicodedata
 from pathlib import Path
 
 import streamlit as st
@@ -26,6 +29,22 @@ st.set_page_config(
     page_icon="🛒",
     layout="wide",
     initial_sidebar_state="expanded",
+)
+
+st.markdown(
+    """
+    <style>
+    .source-card { border: 1px solid #dfe5ec; border-radius: 12px; padding: 12px 14px;
+                   margin: 8px 0; background: #fbfcfe; }
+    .source-title { font-weight: 700; color: #17324d; margin-bottom: 7px; }
+    .source-meta { color: #637083; font-size: 0.82rem; margin-bottom: 8px; }
+    .evidence { white-space: pre-wrap; line-height: 1.55; color: #263645; }
+    mark { background: #fff0a8; color: #1f2933; padding: 1px 3px; border-radius: 3px; }
+    .score-pill { display: inline-block; border-radius: 999px; padding: 2px 8px;
+                  background: #e8f3ff; color: #145da0; font-weight: 650; }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -61,8 +80,43 @@ def get_catalog_stats() -> dict[str, int]:
     }
 
 
-def render_sources(sources: list[dict], expanded: bool = False) -> None:
-    """Render retrieved evidence with readable metadata and safe previews."""
+def _normalize_for_match(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value.lower())
+    return normalized.encode("ascii", "ignore").decode("ascii")
+
+
+def _highlight(content: str, query: str) -> str:
+    """Escape evidence and highlight query words/phrases safely in HTML."""
+    terms = []
+    for term in re.findall(r"[\wÀ-ỹ]+(?:\s+[\wÀ-ỹ]+)?", query, flags=re.UNICODE):
+        if len(_normalize_for_match(term).replace(" ", "")) >= 3:
+            terms.append(term.strip())
+    terms = sorted(set(terms), key=len, reverse=True)[:18]
+    if not terms:
+        return html.escape(content)
+
+    pattern = re.compile("(" + "|".join(re.escape(term) for term in terms) + ")", re.IGNORECASE)
+    parts = []
+    cursor = 0
+    for match in pattern.finditer(content):
+        parts.append(html.escape(content[cursor : match.start()]))
+        parts.append(f"<mark>{html.escape(match.group(0))}</mark>")
+        cursor = match.end()
+    parts.append(html.escape(content[cursor:]))
+    return "".join(parts)
+
+
+def _evidence_overlap(content: str, query: str) -> float:
+    query_terms = set(_normalize_for_match(query).split())
+    content_terms = set(_normalize_for_match(content).split())
+    query_terms = {term for term in query_terms if len(term) > 2}
+    return len(query_terms & content_terms) / max(len(query_terms), 1)
+
+
+def render_sources(
+    sources: list[dict], query: str = "", expanded: bool = False
+) -> None:
+    """Render ranked evidence with score, chunk metadata and highlighted text."""
     if not sources:
         return
 
@@ -79,29 +133,74 @@ def render_sources(sources: list[dict], expanded: bool = False) -> None:
             )
             doc_type = str(metadata.get("type", "unknown"))
             score = source.get("score")
-            score_text = (
-                f"{float(score):.4f}"
-                if isinstance(score, (int, float))
-                else "N/A"
-            )
-
+            score_text = f"{float(score):.4f}" if isinstance(score, (int, float)) else "N/A"
+            chunk_index = metadata.get("chunk_index", "-")
+            overlap = _evidence_overlap(str(source.get("content", "")), query)
+            overlap_text = f"{overlap:.0%}" if query else "-"
+            method = str(source.get("source", "hybrid"))
+            score_kind = "RRF" if method == "hybrid" or "rrf_score" in source else "relevance"
             st.markdown(
-                f"**[{index}] {source_name}** · loại: [{doc_type}] · điểm: [{score_text}]"
+                f'<div class="source-card">'
+                f'<div class="source-title">[{index}] {html.escape(source_name)}</div>'
+                f'<div class="source-meta">Loại: {html.escape(doc_type)} · '
+                f'chunk: {html.escape(str(chunk_index))} · phương thức: {html.escape(method)} · '
+                f'<span class="score-pill">{score_kind} {score_text}</span> · '
+                f'độ khớp từ khóa: <b>{overlap_text}</b></div>',
+                unsafe_allow_html=True,
             )
             content = str(source.get("content", "")).strip()
-            st.text(content[:700] + ("…" if len(content) > 700 else ""))
+            preview = content[:1200] + ("…" if len(content) > 1200 else "")
+            st.markdown(
+                f'<div class="evidence">{_highlight(preview, query)}</div></div>',
+                unsafe_allow_html=True,
+            )
             if index < len(sources):
                 st.divider()
 
 
-def previous_user_question(exclude: str = "") -> str:
-    """Return the previous user question for follow-up retrieval context."""
+MEMORY_WINDOW = 3
+
+
+def recent_user_questions(exclude: str = "", limit: int = MEMORY_WINDOW) -> list[str]:
+    """Return recent user turns in chronological order."""
+    questions = []
     for message in reversed(st.session_state.messages):
-        if message.get("role") == "user":
-            question = str(message.get("content", ""))
-            if question != exclude:
-                return question
-    return ""
+        if message.get("role") != "user":
+            continue
+        question = str(message.get("content", "")).strip()
+        if question and question != exclude:
+            questions.append(question)
+        if len(questions) >= limit:
+            break
+    return list(reversed(questions))
+
+
+def is_follow_up(query: str, history: list[str]) -> bool:
+    """Detect short/anaphoric turns that need conversational context."""
+    if not history:
+        return False
+    normalized = _normalize_for_match(query)
+    markers = (
+        "cai nay", "phuong thuc nay", "san pham nay", "don nay",
+        "the nao", "vay", "the sao", "con ", "them ", "nao khac",
+        "bao nhieu nua", "tiep theo", "what about", "how about",
+    )
+    if any(marker in normalized for marker in markers):
+        return True
+    short_follow_up_words = {"nay", "do", "vay", "khong", "sao"}
+    return len(normalized.split()) <= 6 and bool(short_follow_up_words.intersection(normalized.split()))
+
+
+def build_retrieval_query(query: str, history: list[str]) -> tuple[str, bool]:
+    """Resolve a follow-up against recent questions without polluting new topics."""
+    if not is_follow_up(query, history):
+        return query, False
+    context = "\n".join(f"- {question}" for question in history)
+    return (
+        "Conversation context (recent user questions):\n"
+        f"{context}\n"
+        f"Current follow-up question: {query}"
+    ), True
 
 
 def run_rag(
@@ -110,17 +209,16 @@ def run_rag(
     use_reranking: bool,
     score_threshold: float,
     prior_question: str = "",
+    history_questions: list[str] | None = None,
 ) -> dict:
     """Retrieve evidence first, then generate from exactly those chunks."""
     from src.task9_retrieval_pipeline import retrieve
     from src.task10_generation import generate_with_citation
 
-    retrieval_query = query
-    if prior_question and prior_question != query:
-        retrieval_query = (
-            f"Previous question: {prior_question}\n"
-            f"Follow-up question: {query}"
-        )
+    history = list(history_questions or [])
+    if not history and prior_question and prior_question != query:
+        history = [prior_question]
+    retrieval_query, memory_used = build_retrieval_query(query, history)
 
     sources = retrieve(
         retrieval_query,
@@ -135,6 +233,8 @@ def run_rag(
     )
     response["sources"] = sources
     response["retrieval_query"] = retrieval_query
+    response["memory_used"] = memory_used
+    response["memory_questions"] = history if memory_used else []
     return response
 
 
@@ -154,6 +254,7 @@ with st.sidebar:
     stat_col1.metric("Legal", stats["legal"])
     stat_col2.metric("News", stats["news"])
     st.metric("Markdown chuẩn hóa", stats["markdown"])
+    st.metric("Lượt hỏi trong phiên", len(recent_user_questions()))
 
     if stats["markdown"] == 0:
         st.warning("Chưa có dữ liệu Markdown. Hãy hoàn thành Task 3.")
@@ -168,9 +269,9 @@ with st.sidebar:
         "Ngưỡng fallback PageIndex",
         0.0,
         1.0,
-        0.48,
+        0.20,
         0.01,
-        help="So sánh với cosine score gốc, không phải điểm RRF.",
+        help="Ngưỡng dense để cân nhắc fallback. Với embedding local hiện tại, 0.20 là mức đã hiệu chỉnh.",
     )
 
     st.divider()
@@ -216,8 +317,16 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
         if message["role"] == "assistant":
             retrieval_source = message.get("retrieval_source", "none")
-            st.caption(f"Nguồn retrieval: [{retrieval_source}]")
-            render_sources(message.get("sources", []))
+            st.caption(
+                f"Retrieval: **{retrieval_source}** · "
+                f"{len(message.get('sources', []))} chunks evidence"
+            )
+            if message.get("memory_used"):
+                st.info("🧠 Đã dùng ngữ cảnh các câu hỏi trước để hiểu follow-up.")
+            render_sources(
+                message.get("sources", []),
+                query=message.get("retrieval_query", message.get("content", "")),
+            )
 
 
 typed_query = st.chat_input("Nhập câu hỏi về chính sách/hỗ trợ e-commerce…")
@@ -229,20 +338,21 @@ if query:
     if not query:
         st.stop()
 
-    prior_question = previous_user_question(exclude=query)
+    history_questions = recent_user_questions(exclude=query)
     st.session_state.messages.append({"role": "user", "content": query})
     with st.chat_message("user"):
         st.markdown(query)
 
     with st.chat_message("assistant"):
         with st.spinner("Đang truy hồi tài liệu và tạo câu trả lời…"):
+            response = {}
             try:
                 response = run_rag(
                     query,
                     top_k=top_k,
                     use_reranking=use_reranking,
                     score_threshold=score_threshold,
-                    prior_question=prior_question,
+                    history_questions=history_questions,
                 )
                 answer = response.get(
                     "answer",
@@ -261,11 +371,15 @@ if query:
                 error_message = str(error)
 
         st.markdown(answer)
-        st.caption(f"Nguồn retrieval: [{retrieval_source}]")
+        st.caption(
+            f"Retrieval: **{retrieval_source}** · {len(sources)} chunks evidence"
+        )
+        if response.get("memory_used"):
+            st.info("🧠 Đã dùng ngữ cảnh các câu hỏi trước để hiểu follow-up.")
         if error_message:
             with st.expander("Chi tiết lỗi"):
                 st.code(error_message)
-        render_sources(sources, expanded=True)
+        render_sources(sources, query=response.get("retrieval_query", query), expanded=True)
 
     st.session_state.messages.append(
         {
@@ -273,5 +387,8 @@ if query:
             "content": answer,
             "sources": sources,
             "retrieval_source": retrieval_source,
+            "retrieval_query": response.get("retrieval_query", query),
+            "memory_used": response.get("memory_used", False),
+            "memory_questions": response.get("memory_questions", []),
         }
     )
