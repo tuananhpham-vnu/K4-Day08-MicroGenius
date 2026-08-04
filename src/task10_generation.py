@@ -143,6 +143,7 @@ def generate_with_citation(
     query: str,
     context_chunks: list[dict] | None = None,
     top_k: int = TOP_K,
+    use_reranking: bool = True,
 ) -> dict:
     """Return an extractive answer with citations and source chunks.
 
@@ -154,7 +155,7 @@ def generate_with_citation(
         try:
             from .task9_retrieval_pipeline import retrieve
 
-            chunks = retrieve(query, top_k=top_k)
+            chunks = retrieve(query, top_k=top_k, use_reranking=use_reranking)
         except Exception:
             chunks = []
     else:

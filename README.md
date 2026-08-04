@@ -57,7 +57,7 @@ K4-Day08-RAG-Pipeline-Starter/
 │   └── supervisor.py      ← Pattern nâng cao: Supervisor + Workers song song
 ├── chroma_db/             ← Task 4: vector store đã index (sinh ra khi chạy, không tự viết tay)
 ├── tests/
-│   └── test_individual.py ← Chấm điểm phần Task 1-10 (pytest)
+│   └── test_individual.py ← Chấm điểm bài cá nhân (pytest)
 ├── group_project/
 │   ├── README.md          ← Hướng dẫn bài tập nhóm
 │   └── evaluation/        ← golden_dataset.json, eval_pipeline.py, results.md
@@ -69,7 +69,7 @@ K4-Day08-RAG-Pipeline-Starter/
 
 ## Nhiệm Vụ Chi Tiết
 
-### Task 1 — Thu Thập Văn Bản Chính Sách Thương Mại Điện Tử
+### Task 1 — Thu Thập Văn Bản Chính Sách Thương Mại Điện Tử (Cá nhân)
 
 Tìm và tải về **tối thiểu 3 văn bản chính sách/quy định** dạng PDF/DOCX về chính sách thương mại điện tử. Lưu vào `data/landing/`.
 
@@ -85,7 +85,7 @@ Tìm và tải về **tối thiểu 3 văn bản chính sách/quy định** dạ
 
 ---
 
-### Task 2 — Crawl Bài Viết/Thông Báo
+### Task 2 — Crawl Bài Viết/Thông Báo (Cá nhân)
 
 Crawl **tối thiểu 5 bài viết** hướng dẫn hỗ trợ khách hàng (theo dõi đơn hàng, đổi phương thức thanh toán, bằng chứng hoàn tiền, mua hàng xuyên biên giới).
 
@@ -109,7 +109,7 @@ async def crawl_article(url: str, output_dir: str):
 
 ---
 
-### Task 3 — Convert Sang Markdown
+### Task 3 — Convert Sang Markdown (Cá nhân)
 
 Sử dụng [MarkItDown](https://github.com/microsoft/markitdown) của Microsoft để convert toàn bộ file trong `data/landing/` thành Markdown.
 
@@ -142,7 +142,7 @@ PDF — nếu chỉ `pip install markitdown` sẽ báo lỗi `MissingDependencyE
 
 ---
 
-### Task 4 — Chunking & Indexing
+### Task 4 — Chunking & Indexing (Cá nhân)
 
 Chọn **một loại chunking strategy** và **một embedding model** để index toàn bộ markdown files vào vector store.
 
@@ -175,7 +175,7 @@ pip install chromadb
 
 ---
 
-### Task 5 — Semantic Search Module
+### Task 5 — Semantic Search Module (Cá nhân)
 
 Viết module thực hiện **semantic search** (dense retrieval) trên vector store.
 
@@ -195,7 +195,7 @@ def semantic_search(query: str, top_k: int = 10) -> list[dict]:
 
 ---
 
-### Task 6 — Lexical Search Module
+### Task 6 — Lexical Search Module (Cá nhân)
 
 Viết module thực hiện **lexical search**. Mặc định sử dụng **BM25**.
 
@@ -230,7 +230,7 @@ def lexical_search(query: str, top_k: int = 10) -> list[dict]:
 
 ---
 
-### Task 7 — Reranking Module
+### Task 7 — Reranking Module (Cá nhân)
 
 Viết module **reranking** để chấm lại độ liên quan của kết quả retrieval.
 
@@ -272,7 +272,7 @@ def rerank(query: str, candidates: list[dict], top_k: int = 5) -> list[dict]:
 
 ---
 
-### Task 8 — PageIndex Vectorless RAG
+### Task 8 — PageIndex Vectorless RAG (Cá nhân)
 
 Đăng ký tài khoản tại [https://pageindex.ai/](https://pageindex.ai/), sau đó sử dụng [PageIndex SDK](https://github.com/VectifyAI/PageIndex) để tạo một **vectorless RAG pipeline**.
 
@@ -297,7 +297,7 @@ def pageindex_search(query: str, top_k: int = 5) -> list[dict]:
 
 ---
 
-### Task 9 — Retrieval Pipeline Hoàn Chỉnh
+### Task 9 — Retrieval Pipeline Hoàn Chỉnh (Cá nhân)
 
 Kết hợp tất cả modules thành một **retrieval pipeline** thống nhất với logic fallback:
 
@@ -336,7 +336,7 @@ def retrieve(query: str, top_k: int = 5, score_threshold: float = 0.3) -> list[d
 
 ---
 
-### Task 10 — Generation Có Citation
+### Task 10 — Generation Có Citation (Cá nhân)
 
 Sắp xếp lại context chunks sau reranking để **tránh lost in the middle**, inject vào prompt, và yêu cầu LLM trả lời có **citation**.
 
@@ -381,7 +381,7 @@ def generate_with_citation(query: str, context_chunks: list[dict]) -> str:
 
 ## Bài Tập Nhóm
 
-> **Sau khi cả nhóm hoàn thành Task 1-10**, cùng nhau xây dựng **1 trong 2 sản phẩm** sau:
+> **Sau khi hoàn thành bài cá nhân**, ngồi lại với nhóm để xây dựng **1 trong 2 sản phẩm** sau:
 
 ---
 
@@ -539,7 +539,7 @@ run_dashboard()
 
 ### Yêu Cầu Chung
 
-1. **Tích hợp pipeline** Task 1-10 mà cả nhóm đã xây dựng
+1. **Tích hợp pipeline** từ bài cá nhân của các thành viên
 2. **Demo hoạt động được** trong buổi trình bày (chạy local hoặc deploy)
 3. **Evaluation pipeline** chạy được và có báo cáo kết quả
 4. **Code push lên repository** chung của nhóm
@@ -606,13 +606,13 @@ cp .env.example .env
 
 | Thành phần | Tỷ trọng | Mô tả |
 |-----------|----------|-------|
-| **Pipeline Kỹ Thuật (Task 1-10)** | **50%** | 10 tasks, cả nhóm cùng làm, chấm bằng automated tests + manual review |
+| **Bài Cá Nhân** | **50%** | 10 tasks, chấm bằng automated tests + manual review |
 | **Bài Nhóm** | **30%** | RAG Chatbot + Evaluation pipeline |
 | **Bonus** | **20%** | Các tiêu chí nâng cao (xem bên dưới) |
 
 ---
 
-### Pipeline Kỹ Thuật (Task 1-10) — 50 điểm (50%)
+### Bài Cá Nhân — 50 điểm (50%)
 
 Chấm bằng automated test suite (`pytest tests/ -v`). Mỗi task có test riêng.
 
@@ -637,7 +637,7 @@ Chấm bằng automated test suite (`pytest tests/ -v`). Mỗi task có test ri�
 | Tiêu chí | Điểm |
 |----------|------|
 | RAG Chatbot demo hoạt động được | 8 |
-| Tích hợp pipeline Task 1-10 đã xây dựng | 4 |
+| Tích hợp pipeline các thành viên | 4 |
 | Kiến trúc rõ ràng + README | 3 |
 | Chất lượng câu trả lời (có citation, đúng nội dung) | 3 |
 | **Evaluation pipeline** (DeepEval / RAGAS / TruLens) | **12** |
@@ -660,7 +660,7 @@ Chấm bằng automated test suite (`pytest tests/ -v`). Mỗi task có test ri�
 
 ---
 
-### Chạy Test Chấm Điểm Pipeline Kỹ Thuật (Task 1-10)
+### Chạy Test Chấm Điểm Bài Cá Nhân
 
 ```bash
 # Chạy toàn bộ test suite
@@ -683,7 +683,7 @@ Theo đúng 7 Checkpoint trong `checkpoint_timer.html` (tổng 180 phút = 3 gi�
 | CP1 | 25 phút | 0:10–0:35 | Task 1–3: Thu thập data + convert markdown |
 | CP2 | 25 phút | 0:35–1:00 | Task 4–6: Chunking, indexing, search modules |
 | CP3 | 20 phút | 1:00–1:20 | Task 7–8: Reranking + PageIndex fallback |
-| CP4 | 25 phút | 1:20–1:45 | Task 9–10: Pipeline hoàn chỉnh + generation (mốc 50đ Task 1-10) |
+| CP4 | 25 phút | 1:20–1:45 | Task 9–10: Pipeline hoàn chỉnh + generation (mốc 50đ cá nhân) |
 | CP5 | 30 phút | 1:45–2:15 | Bài nhóm: Chatbot UI & đánh giá RAGAS |
 | CP6 | 45 phút | 2:15–3:00 | Thuyết trình demo live & nộp bài |
 

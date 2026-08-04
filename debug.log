@@ -1,0 +1,3 @@
+[0804/155448.402:ERROR:gpu\ipc\service\gpu_channel_manager.cc:928] ContextResult::kFatalFailure: Failed to create shared context for virtualization.
+[0804/155448.483:ERROR:gpu\ipc\service\gpu_channel_manager.cc:928] ContextResult::kFatalFailure: Failed to create shared context for virtualization.
+[0804/155448.483:ERROR:gpu\ipc\service\gpu_channel_manager.cc:928] ContextResult::kFatalFailure: Failed to create shared context for virtualization.
