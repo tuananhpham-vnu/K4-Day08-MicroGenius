@@ -55,15 +55,6 @@ def chunk_documents(documents: list[dict]) -> list[dict]:
     if not documents:
         return []
 
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", ". ", " ", ""],
-        strip_whitespace=True,
-    )
-
     chunks: list[dict] = []
     for document in documents:
         content = str(document.get("content", "")).strip()
@@ -72,7 +63,7 @@ def chunk_documents(documents: list[dict]) -> list[dict]:
 
         metadata = dict(document.get("metadata", {}))
         source = str(metadata.get("source", "unknown"))
-        for chunk_index, chunk_text in enumerate(splitter.split_text(content)):
+        for chunk_index, chunk_text in enumerate(_split_text(content)):
             if not chunk_text.strip():
                 continue
             chunks.append(
@@ -85,6 +76,63 @@ def chunk_documents(documents: list[dict]) -> list[dict]:
                     },
                 }
             )
+    return chunks
+
+
+def _split_text(content: str) -> list[str]:
+    """Split text without heavy optional dependencies."""
+    return _simple_recursive_split(content)
+
+
+def _simple_recursive_split(content: str) -> list[str]:
+    """Dependency-free chunker that respects CHUNK_SIZE and overlap."""
+    separators = ["\n\n", "\n", ". ", " ", ""]
+    raw_chunks = _split_by_separators(content.strip(), separators)
+
+    chunks: list[str] = []
+    for raw_chunk in raw_chunks:
+        text = raw_chunk.strip()
+        if not text:
+            continue
+        start = 0
+        while start < len(text):
+            chunk = text[start : start + CHUNK_SIZE].strip()
+            if chunk:
+                chunks.append(chunk)
+            if start + CHUNK_SIZE >= len(text):
+                break
+            start += CHUNK_SIZE - CHUNK_OVERLAP
+
+    return chunks
+
+
+def _split_by_separators(text: str, separators: list[str]) -> list[str]:
+    if len(text) <= CHUNK_SIZE:
+        return [text]
+    if not separators:
+        return [text[i : i + CHUNK_SIZE] for i in range(0, len(text), CHUNK_SIZE)]
+
+    separator = separators[0]
+    if separator == "":
+        return [text[i : i + CHUNK_SIZE] for i in range(0, len(text), CHUNK_SIZE)]
+
+    parts = text.split(separator)
+    chunks: list[str] = []
+    current = ""
+    joiner = separator
+
+    for part in parts:
+        candidate = f"{current}{joiner}{part}" if current else part
+        if len(candidate) <= CHUNK_SIZE:
+            current = candidate
+            continue
+
+        if current:
+            chunks.extend(_split_by_separators(current, separators[1:]))
+        current = part
+
+    if current:
+        chunks.extend(_split_by_separators(current, separators[1:]))
     return chunks
 
 
