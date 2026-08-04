@@ -20,10 +20,18 @@ chừng, thử giảm xuống subset 5 câu để chạy kịp trong buổi, ho�
 """
 
 import json
+import os
+import sys
+import types
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 GOLDEN_DATASET_PATH = Path(__file__).parent / "golden_dataset.json"
 RESULTS_PATH = Path(__file__).parent / "results.md"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 def load_golden_dataset() -> list[dict]:
@@ -91,6 +99,8 @@ def evaluate_with_ragas(rag_pipeline, golden_dataset: list[dict]) -> dict:
             (import từ `src.task10_generation`), trả về {'answer': str, 'sources': list[dict]}.
         golden_dataset: List các {'question', 'expected_answer', 'expected_context'}.
     """
+    _install_ragas_vertexai_compat()
+
     from ragas import evaluate
     from ragas.metrics import (
         faithfulness,
@@ -100,6 +110,8 @@ def evaluate_with_ragas(rag_pipeline, golden_dataset: list[dict]) -> dict:
     )
     from datasets import Dataset
 
+    llm = _build_ragas_llm()
+    embeddings = LocalHashEmbeddings()
     eval_data = {"question": [], "answer": [], "contexts": [], "ground_truth": []}
 
     for item in golden_dataset:
@@ -113,8 +125,85 @@ def evaluate_with_ragas(rag_pipeline, golden_dataset: list[dict]) -> dict:
     result = evaluate(
         dataset,
         metrics=[faithfulness, answer_relevancy, context_recall, context_precision],
+        llm=llm,
+        embeddings=embeddings,
     )
     return result.to_pandas()
+
+
+def _build_ragas_llm():
+    """Build a real OpenAI-compatible chat model for RAGAS evaluation."""
+    from langchain_openai import ChatOpenAI
+
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+
+    if openai_key:
+        return ChatOpenAI(
+            model=os.getenv("RAGAS_LLM_MODEL", "gpt-4o-mini"),
+            api_key=openai_key,
+            temperature=0,
+        )
+
+    if openrouter_key:
+        return ChatOpenAI(
+            model=os.getenv("RAGAS_LLM_MODEL", "openai/gpt-4o-mini"),
+            api_key=openrouter_key,
+            base_url="https://openrouter.ai/api/v1",
+            temperature=0,
+            default_headers={
+                "HTTP-Referer": os.getenv("OPENROUTER_SITE_URL", "http://localhost"),
+                "X-Title": os.getenv("OPENROUTER_APP_NAME", "Lab8 RAG Evaluation"),
+            },
+        )
+
+    raise RuntimeError(
+        "RAGAS needs an LLM API key. Set OPENAI_API_KEY or OPENROUTER_API_KEY in .env."
+    )
+
+
+class LocalHashEmbeddings:
+    """LangChain-compatible local embeddings for RAGAS answer relevancy.
+
+    This is not a mock: it uses the same deterministic hashing embedding as
+    Task 5, so RAGAS can compute embedding-based metrics without requiring a
+    paid OpenAI embeddings endpoint.
+    """
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        from src.task5_semantic_search import text_embedding
+
+        return [text_embedding(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        from src.task5_semantic_search import text_embedding
+
+        return text_embedding(text)
+
+
+def _install_ragas_vertexai_compat() -> None:
+    """Patch a RAGAS 0.1.x import path removed from newer langchain-community.
+
+    ``ragas==0.1.21`` imports ``langchain_community.chat_models.vertexai`` at
+    module import time. Newer ``langchain-community`` releases removed that
+    module. RAGAS does not need Vertex AI for this project, so this compatibility
+    module lets RAGAS import normally while still using its real evaluator.
+    """
+    module_name = "langchain_community.chat_models.vertexai"
+    if module_name in sys.modules:
+        return
+
+    module = types.ModuleType(module_name)
+
+    class ChatVertexAI:  # pragma: no cover - only used to satisfy old imports.
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "ChatVertexAI is not installed. This project uses RAGAS with "
+                "the configured default LLM, not Vertex AI."
+            )
+
+    module.ChatVertexAI = ChatVertexAI
+    sys.modules[module_name] = module
 
 
 # =============================================================================

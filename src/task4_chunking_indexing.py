@@ -1,7 +1,7 @@
 """Task 4: chunk standardized Markdown and index it in ChromaDB.
 
 The project standard is 800-character chunks with 100-character overlap and
-the multilingual BAAI/bge-m3 embedding model.
+the multilingual sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 embedding model.
 """
 
 from pathlib import Path
@@ -14,7 +14,7 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 CHUNKING_METHOD = "recursive"
 
-EMBEDDING_MODEL = "BAAI/bge-m3"
+EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 EMBEDDING_DIM = 1024
 
 VECTOR_STORE = "chromadb"
