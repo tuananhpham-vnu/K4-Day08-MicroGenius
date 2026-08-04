@@ -17,7 +17,80 @@ from textwrap import dedent
 
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "landing" / "legal"
+REQUEST_TIMEOUT = 30
+REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Referer": "https://thuvienphapluat.vn/",
+    "Connection": "keep-alive",
+}
 
+# These are public full-text HTML pages, not direct links to PDF attachments.
+LAW_DOCUMENTS: list[dict[str, str]] = [
+    {
+        "title": "Nghi dinh 168/2025/ND-CP ve dang ky doanh nghiep",
+        "source_page": (
+            "https://thuvienphapluat.vn/phap-luat-doanh-nghiep/bai-viet/"
+            "toan-van-nghi-dinh-168-2025-nd-cp-pdf-dang-ky-doanh-nghiep-13181.html"
+        ),
+        "filename": "nghi-dinh-168-2025-dang-ky-doanh-nghiep.txt",
+        "customer_role": "both",
+        "legal_area": "business_registration",
+    },
+    {
+        "title": "Thong tu 68/2025/TT-BTC ve bieu mau dang ky doanh nghiep va ho kinh doanh",
+        "source_page": (
+            "https://thuvienphapluat.vn/phap-luat-doanh-nghiep/bai-viet/"
+            "toan-van-thong-tu-68-2025-tt-btc-pdf-bieu-mau-su-dung-trong-dang-ky-"
+            "doanh-nghiep-dang-ky-ho-kinh-doanh-13182.html"
+        ),
+        "filename": "thong-tu-68-2025-bieu-mau-dang-ky-doanh-nghiep-ho-kinh-doanh.txt",
+        "customer_role": "both",
+        "legal_area": "business_registration_forms",
+    },
+    {
+        "title": "Nghi dinh 01/2021/ND-CP ve dang ky doanh nghiep het hieu luc tu 01/7/2025",
+        "source_page": (
+            "https://thuvienphapluat.vn/phap-luat-doanh-nghiep/bai-viet/"
+            "nghi-dinh-01-2021-nd-cp-ve-dang-ky-doanh-nghiep-se-het-hieu-luc-tu-"
+            "01-7-2025-13186.html"
+        ),
+        "filename": "nghi-dinh-01-2021-dang-ky-doanh-nghiep-het-hieu-luc.txt",
+        "customer_role": "both",
+        "legal_area": "business_registration_superseded",
+    },
+    {
+        "title": "Luat 76/2025/QH15 sua doi Luat Doanh nghiep 2020",
+        "source_page": (
+            "https://thuvienphapluat.vn/phap-luat-doanh-nghiep/bai-viet/"
+            "08-diem-noi-bat-cua-luat-doanh-nghiep-sua-doi-2025-ma-doanh-nghiep-"
+            "can-luu-y-14706.html"
+        ),
+        "filename": "luat-76-2025-sua-doi-luat-doanh-nghiep-2020.txt",
+        "customer_role": "both",
+        "legal_area": "enterprise_law_amendment",
+    },
+]
+
+
+class VisibleTextParser(HTMLParser):
+    """Collect text that a reader can see while ignoring page chrome scripts."""
+
+    IGNORED_TAGS = {"script", "style", "noscript", "svg", "canvas"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self.ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in self.IGNORED_TAGS:
+            self.ignored_depth += 1
 
 LEGAL_DOCUMENTS = [
     {
