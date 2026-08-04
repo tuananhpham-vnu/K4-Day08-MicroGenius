@@ -13,5 +13,80 @@
     "question": "Người bán không được đăng bán những sản phẩm nào?",
     "expected_answer": "Hàng giả/nhái, sản phẩm bất hợp pháp, vi phạm sở hữu trí tuệ, và các mặt hàng nằm trong danh sách cấm của sàn.",
     "expected_context": "Trang Product Listing Regulations, mục Prohibited Content"
+  },
+  {
+    "question": "Hình ảnh sản phẩm đăng bán trên Shopee phải đáp ứng yêu cầu tối thiểu nào về ảnh thật?",
+    "expected_answer": "Phải có ít nhất một hình ảnh thật do chính Người Bán tự chụp, trong đó diện tích sản phẩm thật phải chiếm ít nhất 40% diện tích toàn ảnh.",
+    "expected_context": "Shopee Product Listing Regulations, mục C.1 Hình ảnh sản phẩm"
+  },
+  {
+    "question": "Người bán mỹ phẩm thương hiệu trong nước trên Shopee cần cung cấp giấy tờ gì?",
+    "expected_answer": "Cần đăng kèm hình scan Phiếu công bố mỹ phẩm do Bộ/Sở Y tế cấp, cùng chứng nhận đại lý/hợp đồng mua bán/hóa đơn nhập hàng từ công ty sản xuất (nếu Người Bán là đại lý).",
+    "expected_context": "Shopee Product Listing Regulations, mục C.3.1 Mỹ phẩm"
+  },
+  {
+    "question": "Sản phẩm phải còn tối thiểu bao nhiêu phần trăm và bao nhiêu ngày hạn sử dụng khi giao cho người mua trên Shopee?",
+    "expected_answer": "Phải còn ít nhất 30% thời hạn sử dụng và còn ít nhất 30 ngày, tính từ thời điểm hiện tại đến ngày hết hạn.",
+    "expected_context": "Shopee Product Listing Regulations, mục D.2 Quy định về hạn sử dụng của sản phẩm chính"
+  },
+  {
+    "question": "Người bán trên Shopee có được tăng giá gốc sản phẩm trước khi tham gia khuyến mãi không?",
+    "expected_answer": "Không, nghiêm cấm tăng giá gốc của sản phẩm một cách bất hợp lý trước khi tham gia khuyến mãi nhằm phóng đại tỷ lệ giảm giá.",
+    "expected_context": "Shopee Product Listing Regulations, mục C.6 Giá sản phẩm"
+  },
+  {
+    "question": "Shopee có thể áp dụng những biện pháp xử lý nào đối với người bán vi phạm quy định đăng bán sản phẩm?",
+    "expected_answer": "Xóa/khóa/tạm ẩn hiển thị sản phẩm, giới hạn/khóa tài khoản, yêu cầu bồi thường thiệt hại cho người mua, cấn trừ hoặc khóa tính năng rút tiền từ số dư tài khoản, cung cấp thông tin cho cơ quan nhà nước, hoặc khởi kiện tại tòa án.",
+    "expected_context": "Shopee Product Listing Regulations, mục E Xử lý vi phạm"
+  },
+  {
+    "question": "TikTok Shop là gì?",
+    "expected_answer": "Là một nền tảng thương mại điện tử xã hội, chủ yếu cho phép Người Bán chào bán sản phẩm đến Người Dùng của nền tảng TikTok.",
+    "expected_context": "Điều Khoản Dịch Vụ Dành Cho Người Bán Trên TikTok Shop, mục 5 Về TikTok Shop"
+  },
+  {
+    "question": "Ai được phép sử dụng TikTok Shop để bán hàng?",
+    "expected_answer": "Chỉ những Người Bán được TikTok phê duyệt trước mới có thể sử dụng TikTok Shop; Người Bán cũng có thể ủy quyền cho một bên thứ ba quản lý và tham gia thay mặt mình, nhưng vẫn phải chịu trách nhiệm đối với tất cả hoạt động trên TikTok Shop.",
+    "expected_context": "Điều Khoản Dịch Vụ TikTok Shop, mục 5 Ai Có Thể Sử Dụng TikTok Shop?"
+  },
+  {
+    "question": "TikTok có tự bán sản phẩm trên TikTok Shop không?",
+    "expected_answer": "Không. Hợp đồng bán sản phẩm (Giao Dịch Mua Bán) luôn được ký kết giữa Người Bán và Người Mua.",
+    "expected_context": "Điều Khoản Dịch Vụ TikTok Shop, mục 5, phần Lưu ý quan trọng"
+  },
+  {
+    "question": "Nếu Người Bán không đồng ý với thay đổi mới trong Điều Khoản Dịch Vụ TikTok Shop thì phải làm gì?",
+    "expected_answer": "Phải ngừng truy cập hoặc sử dụng TikTok Shop; việc tiếp tục sử dụng sau ngày hiệu lực của thay đổi được xem là chấp thuận thay đổi đó.",
+    "expected_context": "Điều Khoản Dịch Vụ TikTok Shop, mục 4 Thay Đổi Đối Với Các Điều Khoản Này"
+  },
+  {
+    "question": "Tại Việt Nam, Dịch Vụ Thanh Toán cho các đơn hàng trên TikTok Shop do đơn vị nào cung cấp?",
+    "expected_answer": "Công ty Cổ Phần PIPO Việt Nam (PIPO VN), bằng khả năng của chính PIPO VN hoặc thông qua các bên liên kết được cấp phép hợp lệ của PIPO VN.",
+    "expected_context": "Điều Khoản Dịch Vụ TikTok Shop, mục Nhận khoản thanh toán cho các đơn hàng trên TikTok Shop"
+  },
+  {
+    "question": "Hộ kinh doanh, cá nhân kinh doanh có doanh thu bao nhiêu trong năm dương lịch thì không phải nộp thuế GTGT và thuế TNCN?",
+    "expected_answer": "Từ 100 triệu đồng trở xuống trong năm dương lịch.",
+    "expected_context": "Thông tư 40/2021/TT-BTC, Điều 4 Nguyên tắc tính thuế"
+  },
+  {
+    "question": "Hoạt động thương mại điện tử của cá nhân có thuộc đối tượng áp dụng của Thông tư 40/2021/TT-BTC không?",
+    "expected_answer": "Có. Hoạt động thương mại điện tử, bao gồm cả trường hợp cá nhân có thu nhập từ sản phẩm, dịch vụ nội dung thông tin số, thuộc đối tượng áp dụng của Thông tư.",
+    "expected_context": "Thông tư 40/2021/TT-BTC, Điều 2, khoản 1, điểm đ"
+  },
+  {
+    "question": "Hộ kinh doanh nộp thuế theo phương pháp khoán có phải thực hiện chế độ kế toán không?",
+    "expected_answer": "Không, hộ khoán không phải thực hiện chế độ kế toán, nhưng phải lưu trữ và xuất trình hóa đơn, chứng từ, hợp đồng, hồ sơ chứng minh hàng hóa hợp pháp khi cơ quan thuế yêu cầu.",
+    "expected_context": "Thông tư 40/2021/TT-BTC, Điều 7, khoản 2"
+  },
+  {
+    "question": "Tỷ lệ thuế GTGT và thuế TNCN áp dụng cho hoạt động phân phối, cung cấp hàng hóa (bán buôn, bán lẻ) của hộ kinh doanh, cá nhân kinh doanh là bao nhiêu?",
+    "expected_answer": "Tỷ lệ thuế GTGT là 1% và tỷ lệ thuế TNCN là 0,5% tính trên doanh thu.",
+    "expected_context": "Thông tư 40/2021/TT-BTC, Phụ lục I, mục 1 Phân phối, cung cấp hàng hóa"
+  },
+  {
+    "question": "Có bao nhiêu phương pháp tính thuế đối với hộ kinh doanh, cá nhân kinh doanh theo Thông tư 40/2021/TT-BTC?",
+    "expected_answer": "Ba phương pháp: phương pháp kê khai, phương pháp khai thuế theo từng lần phát sinh, và phương pháp khoán.",
+    "expected_context": "Thông tư 40/2021/TT-BTC, Điều 5, Điều 6, Điều 7"
   }
 ]
