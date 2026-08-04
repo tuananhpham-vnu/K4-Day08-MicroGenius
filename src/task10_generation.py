@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import re
 
+from .task5_semantic_search import _tokenize
+
 
 TOP_K = 5
 TOP_P = 0.9
@@ -56,12 +58,8 @@ STOPWORDS = {
 
 
 def reorder_for_llm(chunks: list[dict]) -> list[dict]:
-    """Place strong chunks at the front and end: front + back[::-1]."""
-    if len(chunks) <= 2:
-        return list(chunks)
-    front = chunks[::2]
-    back = chunks[1::2]
-    return front + back[::-1]
+    """Keep retrieval rank intact so the strongest evidence is read first."""
+    return list(chunks)
 
 
 def format_context(chunks: list[dict]) -> str:
@@ -81,8 +79,7 @@ def format_context(chunks: list[dict]) -> str:
 
 def _query_terms(query: str) -> set[str]:
     """Tokenize a user query into lightweight matching terms."""
-    terms = {term.lower() for term in re.findall(r"[\w]+", query, flags=re.UNICODE)}
-    return {term for term in terms if len(term) > 2 and term not in STOPWORDS}
+    return {term for term in _tokenize(query) if len(term) > 2}
 
 
 def _citation_source(chunk: dict) -> str:
@@ -130,13 +127,32 @@ def _best_sentence(chunk: dict, query_terms: set[str]) -> str:
     if not sentences:
         return content.strip().replace("\n", " ")[:500]
 
-    def sentence_score(sentence: str) -> tuple[int, int]:
-        sentence_terms = {
-            term.lower() for term in re.findall(r"[\w]+", sentence, flags=re.UNICODE)
-        }
-        return (len(query_terms & sentence_terms), -len(sentence))
+    def sentence_score(sentence: str) -> tuple[int, int, int]:
+        sentence_terms = set(_tokenize(sentence))
+        overlap = len(query_terms & sentence_terms)
+        numeric_hits = sum(
+            1 for term in query_terms if term.isdigit() and term in sentence_terms
+        )
+        return (overlap, numeric_hits, -len(sentence))
 
-    return max(sentences, key=sentence_score)
+    ranked = sorted(sentences, key=sentence_score, reverse=True)
+    minimum_overlap = min(2, max(len(query_terms), 1))
+    if ranked and sentence_score(ranked[0])[0] >= minimum_overlap:
+        return ranked[0]
+    return ""
+
+
+def _sentence_relevance(sentence: str, query: str, query_terms: set[str]) -> tuple[int, int, int]:
+    terms = set(_tokenize(sentence))
+    overlap = len(query_terms & terms)
+    query_text = " ".join(_tokenize(query))
+    time_bonus = 0
+    if any(term in query_text for term in ("bao lau", "thoi han", "thoi gian")):
+        if any(term in terms for term in ("ngay", "gio", "thang", "nam")):
+            time_bonus += 3
+        if any(term.isdigit() for term in terms):
+            time_bonus += 3
+    return (overlap + time_bonus, overlap, -len(sentence))
 
 
 def generate_with_citation(
@@ -167,10 +183,16 @@ def generate_with_citation(
         answer = UNKNOWN_ANSWER
     else:
         query_terms = _query_terms(query)
+        evidence = []
+        for chunk in reordered:
+            sentence = _best_sentence(chunk, query_terms)
+            if sentence:
+                evidence.append((_sentence_relevance(sentence, query, query_terms), chunk))
+        evidence.sort(key=lambda item: item[0], reverse=True)
         answer_parts = []
         used_sources: set[str] = set()
 
-        for chunk in reordered:
+        for _, chunk in evidence:
             citation = f"[{_citation_source(chunk)}, {_citation_year(chunk)}]"
             if citation in used_sources:
                 continue

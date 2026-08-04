@@ -3,7 +3,10 @@
 from .task7_reranking import rerank_rrf
 
 
-SCORE_THRESHOLD = 0.48
+# The offline hash-embedding fallback has a lower score range than real BGE.
+# Fallback is also gated by lexical evidence below, so a low dense score alone
+# does not discard a useful hybrid result.
+SCORE_THRESHOLD = 0.20
 DEFAULT_TOP_K = 5
 RERANK_METHOD = "rrf"
 
@@ -21,8 +24,9 @@ def retrieve(
     dense_results = _safe_semantic_search(query, top_k=top_k * 2)
     sparse_results = _safe_lexical_search(query, top_k=top_k * 2)
 
-    best_dense_score = dense_results[0]["score"] if dense_results else 0.0
-    if best_dense_score < score_threshold:
+    best_dense_score = float(dense_results[0]["score"]) if dense_results else 0.0
+    best_sparse_score = float(sparse_results[0]["score"]) if sparse_results else 0.0
+    if best_dense_score < score_threshold and best_sparse_score <= 0.0:
         fallback = _safe_pageindex_search(query, top_k=top_k)
         if fallback:
             return _with_source(fallback[:top_k], "pageindex")
@@ -37,7 +41,7 @@ def retrieve(
         if use_reranking
         else _merge_without_reranking(ranked_lists, top_k=top_k)
     )
-    return _with_source(final_results[:top_k], "hybrid")
+    return _with_source(_diversify(final_results, top_k), "hybrid")
 
 
 def _safe_semantic_search(query: str, top_k: int) -> list[dict]:
@@ -94,6 +98,27 @@ def _with_source(results: list[dict], source: str) -> list[dict]:
         result["source"] = source
         normalized.append(result)
     return normalized
+
+
+def _diversify(results: list[dict], top_k: int) -> list[dict]:
+    """Remove duplicate chunks and cap repeated sources in the context."""
+    selected: list[dict] = []
+    seen_content: set[str] = set()
+    source_counts: dict[str, int] = {}
+    for item in results:
+        content = str(item.get("content", "")).strip()
+        if not content or content in seen_content:
+            continue
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        source = str(metadata.get("source") or metadata.get("filename") or "unknown")
+        if source_counts.get(source, 0) >= 2:
+            continue
+        selected.append(item)
+        seen_content.add(content)
+        source_counts[source] = source_counts.get(source, 0) + 1
+        if len(selected) >= top_k:
+            break
+    return selected
 
 
 if __name__ == "__main__":
