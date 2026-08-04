@@ -23,12 +23,15 @@ import json
 import os
 import sys
 import types
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 GOLDEN_DATASET_PATH = Path(__file__).parent / "golden_dataset.json"
 RESULTS_PATH = Path(__file__).parent / "results.md"
+EVAL_LOG_PATH = Path(__file__).parent / "eval.json"
+RESULTS_VERSION_PREFIX = "results_v"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 load_dotenv(PROJECT_ROOT / ".env")
@@ -88,7 +91,11 @@ def evaluate_with_deepeval(rag_pipeline, golden_dataset: list[dict]) -> dict:
 # Option 2: RAGAS
 # =============================================================================
 
-def evaluate_with_ragas(rag_pipeline, golden_dataset: list[dict]) -> dict:
+def evaluate_with_ragas(
+    rag_pipeline,
+    golden_dataset: list[dict],
+    run_name: str = "overall",
+) -> dict:
     """
     Evaluate RAG pipeline sử dụng RAGAS.
 
@@ -113,13 +120,27 @@ def evaluate_with_ragas(rag_pipeline, golden_dataset: list[dict]) -> dict:
     llm = _build_ragas_llm()
     embeddings = LocalHashEmbeddings()
     eval_data = {"question": [], "answer": [], "contexts": [], "ground_truth": []}
+    eval_records: list[dict] = []
+    run_id = _new_run_id(run_name)
 
-    for item in golden_dataset:
+    for index, item in enumerate(golden_dataset, 1):
         result = rag_pipeline(item["question"])
+        contexts = [c["content"] for c in result["sources"]]
         eval_data["question"].append(item["question"])
         eval_data["answer"].append(result["answer"])
-        eval_data["contexts"].append([c["content"] for c in result["sources"]])
+        eval_data["contexts"].append(contexts)
         eval_data["ground_truth"].append(item["expected_answer"])
+        eval_records.append(
+            {
+                "index": index,
+                "question": item["question"],
+                "expected_answer": item["expected_answer"],
+                "answer": result["answer"],
+                "contexts": contexts,
+                "source_count": len(result["sources"]),
+            }
+        )
+        _write_eval_log(run_id, run_name, "generating", eval_records)
 
     dataset = Dataset.from_dict(eval_data)
     result = evaluate(
@@ -128,29 +149,36 @@ def evaluate_with_ragas(rag_pipeline, golden_dataset: list[dict]) -> dict:
         llm=llm,
         embeddings=embeddings,
     )
-    return result.to_pandas()
+    result_df = result.to_pandas()
+    if "question" not in result_df.columns:
+        result_df.insert(0, "question", eval_data["question"])
+    for index, record in enumerate(eval_records):
+        if index >= len(result_df):
+            continue
+        for metric in METRIC_COLUMNS:
+            if metric in result_df.columns:
+                record[metric] = _json_safe_float(result_df.iloc[index][metric])
+    _write_eval_log(run_id, run_name, "scored", eval_records)
+    return result_df
 
 
 def _build_ragas_llm():
-    """Build a real OpenAI-compatible chat model for RAGAS evaluation."""
+    """Build the OpenRouter chat model used by RAGAS evaluation."""
     from langchain_openai import ChatOpenAI
 
-    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
     openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
-
-    if openai_key:
-        return ChatOpenAI(
-            model=os.getenv("RAGAS_LLM_MODEL", "gpt-4o-mini"),
-            api_key=openai_key,
-            temperature=0,
-        )
+    openrouter_model = os.getenv("RAGAS_LLM_MODEL", "openai/gpt-4o-mini").strip()
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
 
     if openrouter_key:
         return ChatOpenAI(
-            model=os.getenv("RAGAS_LLM_MODEL", "openai/gpt-4o-mini"),
+            model=openrouter_model,
             api_key=openrouter_key,
             base_url="https://openrouter.ai/api/v1",
             temperature=0,
+            max_retries=2,
             default_headers={
                 "HTTP-Referer": os.getenv("OPENROUTER_SITE_URL", "http://localhost"),
                 "X-Title": os.getenv("OPENROUTER_APP_NAME", "Lab8 RAG Evaluation"),
@@ -158,7 +186,10 @@ def _build_ragas_llm():
         )
 
     raise RuntimeError(
-        "RAGAS needs an LLM API key. Set OPENAI_API_KEY or OPENROUTER_API_KEY in .env."
+        "RAGAS is configured to use OpenRouter. Set OPENROUTER_API_KEY in .env. "
+        f"Existing keys detected: OPENAI_API_KEY={bool(openai_key)}, "
+        f"GEMINI_API_KEY={bool(gemini_key)}, "
+        f"DEEPSEEK_API_KEY={bool(deepseek_key)}."
     )
 
 
@@ -272,7 +303,11 @@ def compare_configs(rag_pipeline, golden_dataset: list[dict]) -> dict:
     for config_name, params in configs.items():
         print(f"  → Evaluating config: {config_name} ({params})")
         pipeline_variant = partial(rag_pipeline, **params)
-        results[config_name] = evaluate_with_ragas(pipeline_variant, golden_dataset)
+        results[config_name] = evaluate_with_ragas(
+            pipeline_variant,
+            golden_dataset,
+            run_name=config_name,
+        )
 
     return results
 
@@ -284,7 +319,7 @@ def compare_configs(rag_pipeline, golden_dataset: list[dict]) -> dict:
 METRIC_COLUMNS = ["faithfulness", "answer_relevancy", "context_recall", "context_precision"]
 
 
-def export_results(results, comparison: dict):
+def export_results(results, comparison: dict, chunking_history: list[dict] | None = None):
     """
     Export evaluation results to results.md
 
@@ -317,6 +352,24 @@ def export_results(results, comparison: dict):
         lines.append(f"| {config_name} | " + " | ".join(row) + " |")
     lines.append("")
 
+    if chunking_history:
+        lines.append("## Chunking Method Comparison")
+        lines.append("")
+        lines.append("| Version | Chunking | " + " | ".join(METRIC_COLUMNS) + " |")
+        lines.append("|---------|----------|" + "|".join(["-------"] * len(METRIC_COLUMNS)) + "|")
+        for item in chunking_history[-5:]:
+            scores = item.get("overall_scores", {})
+            row = [
+                f"{scores[col]:.3f}" if isinstance(scores.get(col), (int, float)) else "N/A"
+                for col in METRIC_COLUMNS
+            ]
+            lines.append(
+                f"| {item.get('version', 'N/A')} | {item.get('chunking_method', 'unknown')} | "
+                + " | ".join(row)
+                + " |"
+            )
+        lines.append("")
+
     lines.append("## Worst Performers")
     lines.append("")
     if "faithfulness" in results.columns:
@@ -345,6 +398,134 @@ def export_results(results, comparison: dict):
     RESULTS_PATH.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _new_run_id(run_name: str) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    safe_name = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in run_name)
+    return f"{timestamp}_{safe_name}"
+
+
+def _write_eval_log(run_id: str, run_name: str, status: str, records: list[dict]) -> None:
+    """Persist generation/evaluation progress to eval.json after each question."""
+    if EVAL_LOG_PATH.exists():
+        try:
+            log_data = json.loads(EVAL_LOG_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            log_data = {"runs": []}
+    else:
+        log_data = {"runs": []}
+
+    runs = log_data.setdefault("runs", [])
+    run_entry = next((run for run in runs if run.get("run_id") == run_id), None)
+    if run_entry is None:
+        run_entry = {
+            "run_id": run_id,
+            "run_name": run_name,
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+            "chunking": _chunking_metadata(),
+            "records": [],
+        }
+        runs.append(run_entry)
+
+    run_entry["status"] = status
+    run_entry["updated_at"] = datetime.now().isoformat(timespec="seconds")
+    run_entry["records"] = records
+    EVAL_LOG_PATH.write_text(
+        json.dumps(log_data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _chunking_metadata() -> dict:
+    try:
+        from src import task4_chunking_indexing as task4
+
+        return {
+            "method": task4.CHUNKING_METHOD,
+            "baseline_method": getattr(task4, "BASELINE_CHUNKING_METHOD", "token_text"),
+            "chunk_size": task4.CHUNK_SIZE,
+            "chunk_overlap": task4.CHUNK_OVERLAP,
+        }
+    except Exception:
+        return {"method": "unknown", "baseline_method": "token_text"}
+
+
+def _json_safe_float(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:
+        return None
+    return number
+
+
+def _mean_scores(df) -> dict:
+    scores = {}
+    for metric in METRIC_COLUMNS:
+        if metric in df.columns:
+            scores[metric] = _json_safe_float(df[metric].mean())
+    return scores
+
+
+def _records_from_dataframe(df) -> list[dict]:
+    records = []
+    for _, row in df.iterrows():
+        record = {}
+        for key, value in row.to_dict().items():
+            safe_float = _json_safe_float(value)
+            record[key] = safe_float if safe_float is not None and key in METRIC_COLUMNS else value
+        records.append(record)
+    return records
+
+
+def _next_results_version_path() -> Path:
+    existing_versions = []
+    for path in Path(__file__).parent.glob(f"{RESULTS_VERSION_PREFIX}*.json"):
+        version_text = path.stem.replace(RESULTS_VERSION_PREFIX, "", 1)
+        if version_text.isdigit():
+            existing_versions.append(int(version_text))
+    next_version = max(existing_versions, default=0) + 1
+    return Path(__file__).parent / f"{RESULTS_VERSION_PREFIX}{next_version}.json"
+
+
+def export_versioned_results(results, comparison: dict) -> Path:
+    """Write results_vN.json for run-to-run comparison."""
+    version_path = _next_results_version_path()
+    version = version_path.stem.replace(RESULTS_VERSION_PREFIX, "v", 1)
+    chunking = _chunking_metadata()
+    snapshot = {
+        "version": version,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "golden_dataset_size": len(results),
+        "chunking_method": chunking.get("method", "unknown"),
+        "baseline_chunking_method": chunking.get("baseline_method", "token_text"),
+        "chunking": chunking,
+        "overall_scores": _mean_scores(results),
+        "comparison_scores": {
+            config_name: _mean_scores(df) for config_name, df in comparison.items()
+        },
+        "overall_records": _records_from_dataframe(results),
+    }
+    version_path.write_text(
+        json.dumps(snapshot, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return version_path
+
+
+def load_chunking_history() -> list[dict]:
+    """Load versioned JSON snapshots for the Markdown comparison table."""
+    history = []
+    for path in sorted(Path(__file__).parent.glob(f"{RESULTS_VERSION_PREFIX}*.json")):
+        try:
+            item = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        item.setdefault("version", path.stem.replace(RESULTS_VERSION_PREFIX, "v", 1))
+        history.append(item)
+    return history
+
+
 if __name__ == "__main__":
     golden_dataset = load_golden_dataset()
     print(f"Loaded {len(golden_dataset)} test cases")
@@ -352,10 +533,12 @@ if __name__ == "__main__":
     from src.task10_generation import generate_with_citation
 
     print("Running RAGAS evaluation (overall)...")
-    results = evaluate_with_ragas(generate_with_citation, golden_dataset)
+    results = evaluate_with_ragas(generate_with_citation, golden_dataset, run_name="overall")
 
     print("Running A/B comparison (hybrid_rerank vs dense_only)...")
     comparison = compare_configs(generate_with_citation, golden_dataset)
 
-    export_results(results, comparison)
+    version_path = export_versioned_results(results, comparison)
+    export_results(results, comparison, chunking_history=load_chunking_history())
+    print(f"Versioned JSON exported to {version_path}")
     print(f"✓ Results exported to {RESULTS_PATH}")

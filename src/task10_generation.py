@@ -6,15 +6,20 @@ deterministic extractive step over retrieved evidence.
 
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 
+from dotenv import load_dotenv
 from .task5_semantic_search import _tokenize
 
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 TOP_K = 5
 TOP_P = 0.9
 TEMPERATURE = 0.3
-LLM_MODEL = "local-extractive"
+LLM_MODEL = "gemini-3.5-flash-lite"
 
 SYSTEM_PROMPT = """Answer the following question comprehensively.
 For every statement of fact or claim, immediately insert a citation
@@ -161,11 +166,11 @@ def generate_with_citation(
     top_k: int = TOP_K,
     use_reranking: bool = True,
 ) -> dict:
-    """Return an extractive answer with citations and source chunks.
+    """Return a Gemini-generated answer with citations and source chunks.
 
     TOP_P=0.9 and TEMPERATURE=0.3 are documented LLM defaults: broad enough to
-    phrase naturally, low enough for factual QA. The local extractor is used so
-    tests and demos still work without a networked model.
+    phrase naturally, low enough for factual QA. The local extractor remains as
+    an offline fallback when GEMINI_API_KEY is not configured.
     """
     if context_chunks is None:
         try:
@@ -181,36 +186,10 @@ def generate_with_citation(
 
     if not chunks:
         answer = UNKNOWN_ANSWER
+    elif os.getenv("GEMINI_API_KEY", "").strip():
+        answer = _generate_with_gemini(query, reordered, context)
     else:
-        query_terms = _query_terms(query)
-        evidence = []
-        for chunk in reordered:
-            sentence = _best_sentence(chunk, query_terms)
-            if sentence:
-                evidence.append((_sentence_relevance(sentence, query, query_terms), chunk))
-        evidence.sort(key=lambda item: item[0], reverse=True)
-        answer_parts = []
-        used_sources: set[str] = set()
-
-        for _, chunk in evidence:
-            citation = f"[{_citation_source(chunk)}, {_citation_year(chunk)}]"
-            if citation in used_sources:
-                continue
-
-            sentence = _best_sentence(chunk, query_terms).strip()
-            if not sentence:
-                continue
-
-            sentence = sentence[:500].rstrip()
-            if not sentence.endswith((".", "!", "?")):
-                sentence += "."
-            answer_parts.append(f"{sentence} {citation}")
-            used_sources.add(citation)
-
-            if len(answer_parts) >= 3:
-                break
-
-        answer = " ".join(answer_parts) if answer_parts else UNKNOWN_ANSWER
+        answer = _generate_extractive_answer(query, reordered)
 
     return {
         "answer": answer,
@@ -218,6 +197,66 @@ def generate_with_citation(
         "retrieval_source": chunks[0].get("source", "hybrid") if chunks else "none",
         "context": context,
     }
+
+
+def _generate_with_gemini(query: str, chunks: list[dict], context: str) -> str:
+    """Generate a cited answer with Gemini."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", "").strip())
+    model = os.getenv("GEMINI_GENERATION_MODEL", LLM_MODEL).strip() or LLM_MODEL
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=(
+                f"Question:\n{query}\n\n"
+                f"Context:\n{context}\n\n"
+                "Answer with citations from the provided context only."
+            ),
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=TEMPERATURE,
+                top_p=TOP_P,
+            ),
+        )
+    except Exception:
+        return _generate_extractive_answer(query, chunks)
+    answer = (getattr(response, "text", None) or "").strip()
+    return answer or _generate_extractive_answer(query, chunks)
+
+
+def _generate_extractive_answer(query: str, chunks: list[dict]) -> str:
+    """Offline fallback used only when GEMINI_API_KEY is unavailable."""
+    query_terms = _query_terms(query)
+    evidence = []
+    for chunk in chunks:
+        sentence = _best_sentence(chunk, query_terms)
+        if sentence:
+            evidence.append((_sentence_relevance(sentence, query, query_terms), chunk))
+    evidence.sort(key=lambda item: item[0], reverse=True)
+    answer_parts = []
+    used_sources: set[str] = set()
+
+    for _, chunk in evidence:
+        citation = f"[{_citation_source(chunk)}, {_citation_year(chunk)}]"
+        if citation in used_sources:
+            continue
+
+        sentence = _best_sentence(chunk, query_terms).strip()
+        if not sentence:
+            continue
+
+        sentence = sentence[:500].rstrip()
+        if not sentence.endswith((".", "!", "?")):
+            sentence += "."
+        answer_parts.append(f"{sentence} {citation}")
+        used_sources.add(citation)
+
+        if len(answer_parts) >= 3:
+            break
+
+    return " ".join(answer_parts) if answer_parts else UNKNOWN_ANSWER
 
 
 if __name__ == "__main__":

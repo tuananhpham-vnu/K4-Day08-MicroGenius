@@ -18,6 +18,8 @@ fpdf2>=2.7.0
 # Task 4 - Chunking & Indexing
 langchain-text-splitters==0.2.4
 chromadb>=0.5.0
+semantic-router>=0.1.0
+semantic-chunkers>=0.0.10
 
 # Task 4/5 - Embedding provider (mac dinh: sentence_transformers, local, khong can API key)
 # Doi provider qua bien EMBEDDING_PROVIDER trong .env: sentence_transformers | google | openai
@@ -34,6 +36,7 @@ pageindex>=0.1.0
 
 # Task 10 - Generation
 openai==1.109.1
+google-genai>=1.0.0
 
 # Group project - UI
 streamlit>=1.35.0

@@ -1,7 +1,7 @@
 """Task 4: chunk standardized Markdown and index it in ChromaDB.
 
-The project standard is 800-character chunks with 100-character overlap and
-the multilingual sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 embedding model.
+The current project variant uses semantic statistical chunking. The previous
+token/character settings are kept as a baseline label for evaluation history.
 """
 
 from pathlib import Path
@@ -12,7 +12,8 @@ CHROMA_DIR = Path(__file__).parent.parent / "chroma_db"
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
-CHUNKING_METHOD = "recursive"
+BASELINE_CHUNKING_METHOD = "token_text"
+CHUNKING_METHOD = "statistical"
 
 EMBEDDING_MODEL = "BAAI/bge-m3"
 EMBEDDING_DIM = 1024
@@ -51,7 +52,7 @@ def load_documents() -> list[dict]:
 
 
 def chunk_documents(documents: list[dict]) -> list[dict]:
-    """Split documents with a recursive character splitter."""
+    """Split documents with semantic_chunkers.StatisticalChunker."""
     if not documents:
         return []
 
@@ -80,8 +81,85 @@ def chunk_documents(documents: list[dict]) -> list[dict]:
 
 
 def _split_text(content: str) -> list[str]:
-    """Split text without heavy optional dependencies."""
-    return _simple_recursive_split(content)
+    """Split text with StatisticalChunker and cap oversized chunks."""
+    try:
+        chunk_texts = _statistical_split(content)
+    except Exception as exc:
+        raise RuntimeError(
+            "Statistical chunking requires semantic-router and semantic-chunkers. "
+            "Run `pip install -r requirements.txt` before Task 4."
+        ) from exc
+
+    chunks: list[str] = []
+    for chunk_text in chunk_texts:
+        text = str(chunk_text).strip()
+        if not text:
+            continue
+        if len(text) <= int(CHUNK_SIZE * 1.1):
+            chunks.append(text)
+        else:
+            chunks.extend(_simple_recursive_split(text))
+    return chunks
+
+
+def _statistical_split(content: str) -> list[str]:
+    """Use the requested semantic-router + semantic-chunkers chunker."""
+    from semantic_router.encoders import HuggingFaceEncoder
+    from semantic_chunkers import StatisticalChunker
+
+    encoder = HuggingFaceEncoder()
+    statistical_chunker = StatisticalChunker(encoder=encoder)
+
+    try:
+        raw_chunks = statistical_chunker(docs=[content])
+    except TypeError:
+        try:
+            raw_chunks = statistical_chunker([content])
+        except TypeError:
+            raw_chunks = statistical_chunker.chunk(content)
+
+    return _coerce_chunk_texts(raw_chunks)
+
+
+def _coerce_chunk_texts(raw_chunks) -> list[str]:
+    """Normalize semantic-chunkers outputs to a list of text strings."""
+    texts: list[str] = []
+
+    def visit(value) -> None:
+        if value is None:
+            return
+        if isinstance(value, str):
+            texts.append(value)
+            return
+        if isinstance(value, dict):
+            for key in ("content", "text", "page_content"):
+                if key in value:
+                    visit(value[key])
+                    return
+            if "splits" in value:
+                visit(value["splits"])
+            return
+        if hasattr(value, "content"):
+            visit(value.content)
+            return
+        if hasattr(value, "text"):
+            visit(value.text)
+            return
+        if hasattr(value, "splits"):
+            splits = value.splits
+            if isinstance(splits, list):
+                joined = " ".join(str(split).strip() for split in splits if str(split).strip())
+                if joined:
+                    texts.append(joined)
+            else:
+                visit(splits)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item)
+
+    visit(raw_chunks)
+    return [text.strip() for text in texts if text and text.strip()]
 
 
 def _simple_recursive_split(content: str) -> list[str]:
@@ -210,7 +288,10 @@ def run_pipeline():
     """Run load -> chunk -> embed -> index."""
     print("=" * 50)
     print("Task 4: Chunking & Indexing")
-    print(f"  Chunking: {CHUNKING_METHOD} (size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})")
+    print(
+        f"  Chunking: {CHUNKING_METHOD} "
+        f"(baseline={BASELINE_CHUNKING_METHOD}, size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})"
+    )
     print(f"  Embedding: {EMBEDDING_MODEL} (dim={EMBEDDING_DIM})")
     print(f"  Vector Store: {VECTOR_STORE}")
     print("=" * 50)
