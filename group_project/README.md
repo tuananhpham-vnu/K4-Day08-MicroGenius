@@ -77,12 +77,12 @@ Xem code mẫu (DeepEval/RAGAS/TruLens) chi tiết trong `README.md` gốc mục
 
 ## Phân Công Công Việc
 
-| Thành viên | MSSV | Nhiệm vụ | Trạng thái |
-|-----------|------|----------|------------|
-| | | | |
-| | | | |
-| | | | |
-| | | | |
+| Thành viên | MSSV | Nhiệm vụ | 
+|-----------|------|----------|
+| Mai Tiến Dũng | 2A202601838 | Role 1|
+| Nguyễn Đức Anh | 2A202601788 | Role 2|
+| Phạm Tuấn Anh | 2A202601070 | Role 3|
+| Nguyễn Thị Thương | 2A202601226 | Role 4 |
 
 ---
 
