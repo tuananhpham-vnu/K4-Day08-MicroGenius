@@ -10,19 +10,22 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "landing" / "news"
+PROJECT_DIR = Path(__file__).parent.parent
+CRAWL4AI_RUNTIME_DIR = PROJECT_DIR / ".crawl4ai_runtime"
 
 
 ARTICLE_URLS = [
     "https://help.shopee.vn/portal/4/article/77251",
     "https://help.shopee.vn/portal/4/article/79198",
     "https://help.shopee.vn/portal/4/article/77244",
-    "https://help.shopee.vn/portal/4",
-    "https://help.shopee.vn/portal/4/category/27",
+    "https://help.shopee.vn/portal/4/article/79084",
+    "https://help.shopee.vn/portal/4/article/84824",
 ]
 
 
@@ -113,6 +116,11 @@ def _with_metadata(article: dict[str, str], source_url: str | None = None) -> di
     }
 
 
+def _format_error(exc: Exception) -> str:
+    """Return an ASCII-safe error message for Windows consoles."""
+    return str(exc).encode("ascii", errors="replace").decode("ascii")
+
+
 def _fallback_article(url: str) -> dict[str, str]:
     fallback_by_url = {article["url"]: article for article in FALLBACK_ARTICLES}
     article = fallback_by_url.get(url)
@@ -144,16 +152,18 @@ async def crawl_article(crawler: object, url: str) -> dict[str, str]:
 async def crawl_all(overwrite: bool = True) -> list[Path]:
     """Crawl or seed all articles in ARTICLE_URLS."""
     setup_directory()
+    CRAWL4AI_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("CRAWL4_AI_BASE_DIRECTORY", str(CRAWL4AI_RUNTIME_DIR))
     saved_files: list[Path] = []
     crawler = None
 
     try:
         from crawl4ai import AsyncWebCrawler
 
-        crawler = AsyncWebCrawler()
+        crawler = AsyncWebCrawler(base_directory=str(CRAWL4AI_RUNTIME_DIR))
         await crawler.__aenter__()
     except Exception as exc:
-        print(f"Live crawl unavailable, using fallback articles: {exc}")
+        print(f"Live crawl unavailable, using fallback articles: {_format_error(exc)}")
         crawler = None
 
     try:
@@ -165,7 +175,7 @@ async def crawl_all(overwrite: bool = True) -> list[Path]:
                 try:
                     article = await crawl_article(crawler, url)
                 except Exception as exc:
-                    print(f"Live crawl skipped for {url}: {exc}")
+                    print(f"Live crawl skipped for {url}: {_format_error(exc)}")
                     article = _fallback_article(url)
 
             filepath = DATA_DIR / f"article_{i:02d}.json"
